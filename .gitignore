@@ -1,10 +1,19 @@
-env
-tokens*
+# Environment
+.env
+
+# Databases
+*.db
+*.sqlite3
+
+# Python
 __pycache__/
-.vscode/
-*.ipynb
-menu.txt
-play*
+*.pyc
+*.pyo
+*.pyd
 api.key
-pg*
-refresh-tokens*
+# IDEs
+.vscode/
+.idea/
+
+# Other
+qris_payment.png

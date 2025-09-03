@@ -336,12 +336,12 @@ def settlement_qris(
     
     try:
         decrypted_body = decrypt_xdata(api_key, json.loads(resp.text))
-        if decrypted_body["status"] != "SUCCESS":
+        if decrypted_body.get("status") != "SUCCESS":
             print("Failed to initiate settlement.")
             print(f"Error: {decrypted_body}")
-            return None
+            return decrypted_body # Return the full error response
         
-        transaction_id = decrypted_body["data"]["transaction_code"]
+        transaction_id = decrypted_body.get("data", {}).get("transaction_code")
         
         return transaction_id
     except Exception as e:
@@ -382,7 +382,7 @@ def show_qris_payment(api_key: str, tokens: dict, package_option_code: str, toke
     token_payment = payment_methods_data["token_payment"]
     ts_to_sign = payment_methods_data["timestamp"]
     
-    transaction_id = settlement_qris(
+    settlement_response = settlement_qris(
         api_key,
         tokens,
         token_payment,
@@ -392,33 +392,33 @@ def show_qris_payment(api_key: str, tokens: dict, package_option_code: str, toke
         ""
     )
     
-    if not transaction_id:
+    if not isinstance(settlement_response, str):
+        # This means settlement failed and we got an error dictionary back
         print("Failed to create QRIS transaction.")
-        return
+        return settlement_response # Pass the error dict back
+
+    transaction_id = settlement_response
     
     print("Fetching QRIS code...")
     qris_code = get_qris_code(api_key, tokens, transaction_id)
     if not qris_code:
         print("Failed to get QRIS code.")
-        return
-    print(f"QRIS data:\n{qris_code}")
+        return None
     
+    # Generate and save the QR code image
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.constants.ERROR_CORRECT_L,
-        box_size=1,
-        border=1,
+        box_size=10,
+        border=4,
     )
     qr.add_data(qris_code)
     qr.make(fit=True)
-    qr.print_ascii(invert=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    img_path = "qris_payment.png"
+    img.save(img_path)
     
-    qris_b64 = base64.urlsafe_b64encode(qris_code.encode()).decode()
-    qris_url = f"https://ki-ar-kod.netlify.app/?data={qris_b64}"
-    
-    print(f"Atau buka link berikut untuk melihat QRIS:\n{qris_url}")
-    
-    return
+    return img_path
 
 def settlement_bounty(
     api_key: str,

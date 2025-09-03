@@ -4,7 +4,6 @@ import sys
 from datetime import datetime
 from api_request import get_otp, submit_otp, save_tokens, get_package, purchase_package
 from purchase_api import show_multipayment, show_qris_payment, settlement_bounty
-from auth_helper import AuthInstance
 
 def clear_screen():
     print("clearing screen...")
@@ -40,6 +39,7 @@ def show_main_menu(number, balance, balance_expired_at):
     print("--------------------------")
         
 def show_account_menu():
+    from auth_helper import AuthInstance
     clear_screen()
     AuthInstance.load_tokens()
     users = AuthInstance.refresh_tokens
@@ -162,6 +162,7 @@ def login_prompt(api_key: str):
         return None, None
     
 def show_package_menu(packages):
+    from auth_helper import AuthInstance
     api_key = AuthInstance.api_key
     tokens = AuthInstance.get_active_tokens()
     if not tokens:

@@ -50,11 +50,17 @@ def get_otp(contact: str) -> str:
         print("response body", response.text)
         json_body = json.loads(response.text)
     
-        if "subscriber_id" not in json_body:
-            print(json_body.get("error", "No error message in response"))
-            raise ValueError("Subscriber ID not found in response")
+        if "subscriber_id" in json_body:
+            return json_body["subscriber_id"]
         
-        return json_body["subscriber_id"]
+        # Check for specific time limit error
+        error_msg = json_body.get("error", "")
+        if "time limit" in error_msg:
+            return {"error": error_msg}
+            
+        print(error_msg)
+        raise ValueError("Subscriber ID not found in response")
+        
     except Exception as e:
         print(f"Error requesting OTP: {e}")
         return None
@@ -301,11 +307,10 @@ def get_family(api_key: str, tokens: dict, family_code: str) -> dict:
     res = send_api_request(api_key, path, payload_dict, id_token, "POST")
     if res.get("status") != "SUCCESS":
         print(f"Failed to get family {family_code}")
-        print(json.dumps(res, indent=2))
         input("Press Enter to continue...")
         return None
     
-    return res["data"]
+    return res.get("data")
 
 def get_families(api_key: str, tokens: dict, package_category_code: str) -> dict:
     print("Fetching families...")
@@ -415,7 +420,15 @@ def send_payment_request(
         print("[decrypt err]", e)
         return resp.text
 
-def purchase_package(api_key: str, tokens: dict, package_option_code: str) -> dict:
+def purchase_package(
+    api_key: str, 
+    tokens: dict, 
+    package_option_code: str, 
+    payment_method: str = "BALANCE", 
+    wallet_number: str = ""
+) -> dict:
+    from purchase_api import show_qris_payment, settlement_multipayment
+
     package_details_data = get_package(api_key, tokens, package_option_code)
     if not package_details_data:
         print("Failed to get package details for purchase.")
@@ -424,15 +437,11 @@ def purchase_package(api_key: str, tokens: dict, package_option_code: str) -> di
     token_confirmation = package_details_data["token_confirmation"]
     payment_target = package_details_data["package_option"]["package_option_code"]
     price = package_details_data["package_option"]["price"]
-    amount_str = input(f"Package price is {price}. Enter value if you need to overwrite, press enter to ignore: ")
-    amount_int = price
-    if amount_str != "":
-        try:
-            amount_int = int(amount_str)
-        except ValueError:
-            print("Invalid overwrite input, using original price.")
-            return None
     
+    if payment_method == "QRIS":
+        return show_qris_payment(api_key, tokens, package_option_code, token_confirmation, price)
+
+    # Default to BALANCE payment if not QRIS
     payment_path = "payments/api/v8/payment-methods-option"
     payment_payload = {
         "payment_type": "PURCHASE",
@@ -448,7 +457,6 @@ def purchase_package(api_key: str, tokens: dict, package_option_code: str) -> di
     if payment_res.get("status") != "SUCCESS":
         print("Failed to initiate payment")
         print(json.dumps(payment_res, indent=2))
-        input("Press Enter to continue...")
         return None
     
     token_payment = payment_res["data"]["token_payment"]
@@ -495,10 +503,10 @@ def purchase_package(api_key: str, tokens: dict, package_option_code: str) -> di
         "wallet_number": "",
         "encrypted_authentication_id": build_encrypted_field(urlsafe_b64=True),
         "additional_data": {},
-        "total_amount": amount_int,
+        "total_amount": price,
         "is_using_autobuy": False,
         "items": [{
-            "item_code": payment_target,
+            "item__code": payment_target,
             "product_type": "",
             "item_price": price,
             "item_name": "",
@@ -507,11 +515,7 @@ def purchase_package(api_key: str, tokens: dict, package_option_code: str) -> di
     }
     
     print("Processing purchase...")
-    # print(f"settlement payload:\n{json.dumps(settlement_payload, indent=2)}")
     purchase_result = send_payment_request(api_key, settlement_payload, tokens["access_token"], tokens["id_token"], token_payment, ts_to_sign)
     
     print(f"Purchase result:\n{json.dumps(purchase_result, indent=2)}")
-    
-    input("Press Enter to continue...")
-
-    
+    return purchase_result
